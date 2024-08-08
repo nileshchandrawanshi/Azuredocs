@@ -1,0 +1,39 @@
+Azure DevOps CI/CD Cost Estimation
+Project Overview
+This document provides a cost estimation for implementing a CI/CD pipeline in Azure DevOps using self-hosted agents. The estimation covers the cost of pipelines and artifact storage based on current Azure pricing.
+
+Pipeline Configuration
+Number of Pipelines: 4
+Agent Type: Self-hosted
+Cost Breakdown
+1. Pipelines Cost
+Self-hosted Agent Cost: $15 per extra parallel job with unlimited minutes.
+Base Cost: $45 per month.
+Given the 4 pipelines:
+
+Total Cost for 4 Pipelines:
+$45 base cost per month.
+No additional charges for self-hosted agent usage.
+Total Monthly Pipeline Cost: $45
+
+2. Artifact Storage Cost
+Storage Used: 20 GB
+Pricing Structure:
+0 - 2 GiB = Free
+2 - 10 GiB = $2 per GiB
+10 - 100 GiB = $1 per GiB
+Cost Calculation:
+
+First 2 GiB: Free
+Next 8 GiB (2 - 10 GiB): 8 GiB * $2/GiB = $16
+Remaining 10 GiB (10 - 20 GiB): 10 GiB * $1/GiB = $10
+Total Monthly Artifact Storage Cost: $26
+
+Summary of Monthly Costs
+Pipelines Cost: $45
+Artifact Storage Cost: $26
+Total Estimated Monthly Cost: $71
+
+Notes
+The cost estimation is based on current Azure DevOps pricing and may vary with changes in usage or pricing structure.
+This estimation assumes a stable usage pattern without additional pipeline runs or storage needs.
