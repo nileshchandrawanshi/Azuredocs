@@ -1,0 +1,20 @@
+Subject: CI/CD Pipeline Development and Deployment Plan for Azure VMs
+
+Dear [Manager's Name],
+
+I am currently working on building a CI/CD pipeline in Azure DevOps to deploy an application to Azure VMs. However, I am facing a challenge that I would like to explain and propose a solution for.
+
+The application needs to be deployed to three VMs located in a private subnet that do not have internet access. Because of this, I am unable to directly push the build artifacts from Azure DevOps to the VMs. To overcome this, I need to set up a jump host (bastion server) within the same subnet as the VMs. This jump host would have the following configuration:
+
+Same Subnet: The jump host will reside in the same private subnet as the three VMs to ensure internal communication.
+Public IP: The jump host will be assigned a public IP address to allow me to access it remotely.
+The deployment plan would be as follows:
+
+First, I will access the jump host via its public IP.
+From the jump host, I will connect to the three VMs using their private IPs and proceed to deploy the application.
+Currently, I am using a service principal to create a service connection in Azure DevOps, which has the "VM Contributor" role assigned to the three VMs. However, this service connection only allows me to create folders and copy files between locations. Due to the lack of internet access on the VMs, pushing build artifacts directly to them is not possible.
+move forward, I will use the jump host as a bridge for accessing the VMs.
+Please let me know if you have any concerns or require additional information.
+
+Best regards,
+[Your Name]
