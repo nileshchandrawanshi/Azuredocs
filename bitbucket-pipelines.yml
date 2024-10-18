@@ -1,0 +1,120 @@
+image: atlassian/default-image:4
+
+definitions:
+  caches:
+    pnpm: $BITBUCKET_CLONE_DIR/.pnpm-store
+  setAwsProfile: &setAwsProfile |
+    aws configure set aws_access_key_id "${DTS_AWS_KEY}" --profile appfire-ci &&
+    aws configure set aws_secret_access_key "${DTS_AWS_SECRET}" --profile appfire-ci &&
+    aws configure set region us-east-1 --profile appfire-ci
+  buildForConfluence: &buildForConfluence |
+    yq eval '.key = "com.wittified.atl-announcer-confluence-dev"' -i public/atlassian-connect.json
+    yq eval '.fuse.app = "announcer-conf"' -i fuse-config.yaml
+  buildForJira: &buildForJira |
+    yq eval '.key = "com.wittified.atl-announcer-jira-dev"' -i public/atlassian-connect.json
+    yq eval '.fuse.app = "announcer-jira"' -i fuse-config.yaml
+  setProdAwsCreds: &setProdAwsCreds |
+    export CDK_DEPLOY_ACCOUNT=$PROD_AWS_ACCOUNT &&
+    export CDK_DEPLOY_REGION=$PROD_AWS_DEFAULT_REGION &&
+    export AWS_DEFAULT_REGION=$PROD_AWS_DEFAULT_REGION &&
+    export AWS_ACCESS_KEY_ID=$PROD_AWS_ACCESS_KEY_ID &&
+    export AWS_SECRET_ACCESS_KEY=$PROD_AWS_SECRET_ACCESS_KEY
+  setDtsAwsCreds: &setDtsAwsCreds |
+    export CDK_DEPLOY_ACCOUNT=$DTS_AWS_ACCOUNT &&
+    export CDK_DEPLOY_REGION=$DTS_AWS_DEFAULT_REGION &&
+    export AWS_DEFAULT_REGION=$DTS_AWS_DEFAULT_REGION &&
+    export AWS_ACCESS_KEY_ID=$DTS_AWS_ACCESS_KEY_ID &&
+    export AWS_SECRET_ACCESS_KEY=$DTS_AWS_SECRET_ACCESS_KEY
+  setNexus: &setNexus |
+    npm install -g npm@8.19.3 &&
+    npm config set registry $NEXUS_PROD_GROUP_REGISTRY &&
+    npm config set @fusesnapshot:registry $NEXUS_FUSE_SNAPSHOT_REGISTRY &&
+    npm config set @fuseprod:registry $NEXUS_FUSE_PROD_REGISTRY &&
+    npm config set email $NEXUS_READONLY_EMAIL &&
+    npm config set _auth=$NEXUS_READONLY_TOKEN &&
+    npm config set ${NEXUS_PROD_GROUP_REGISTRY:6}:_auth=$NEXUS_READONLY_TOKEN &&
+    npm config set ${NEXUS_SNAPSHOT_GROUP_REGISTRY:6}:_auth=$NEXUS_READONLY_TOKEN &&
+    npm config set ${NEXUS_FUSE_SNAPSHOT_REGISTRY:6}:_auth=$NEXUS_READONLY_TOKEN &&
+    npm config set ${NEXUS_FUSE_PROD_REGISTRY:6}:_auth=$NEXUS_READONLY_TOKEN
+  preInstalls: &preInstalls |
+    if ! command -v aws &> /dev/null
+    then
+      curl "https://d1vvhvl2y92vvt.cloudfront.net/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" &&
+      unzip awscliv2.zip &&
+      ./aws/install
+    fi &&
+    if ! command -v yq &> /dev/null
+    then
+      wget https://github.com/mikefarah/yq/releases/download/v4.9.3/yq_linux_amd64 -O /usr/bin/yq &&
+      chmod +x /usr/bin/yq
+    fi &&
+    npm install -g pnpm &&
+    npm install -g aws-cdk
+
+pipelines:
+  pull-requests:
+    "**":
+      - parallel:
+          - step:
+              name: "Running Lints"
+              script:
+                - *preInstalls
+                - *setNexus
+                - *setDtsAwsCreds
+                - *setAwsProfile
+                - pnpm install
+                - pnpm run lint -- --concurrency=2
+              caches:
+                - pnpm
+          - step:
+              name: "Running Tests"
+              script:
+                - *preInstalls
+                - *setNexus
+                - *setDtsAwsCreds
+                - *setAwsProfile
+                - pnpm install
+                - pnpm run tests -- --concurrency=2
+              caches:
+                - pnpm
+  branches:
+    develop:
+      - step:
+          name: Deploy to dev
+          script:
+            - env | sort
+            - *preInstalls
+            - *setNexus
+            - *setDtsAwsCreds
+            - *setAwsProfile
+            - npm config list
+            - pnpm install --no-frozen-lockfile
+            - *buildForConfluence
+            - npx @appfire/fuse-cli deploy --stage dev --profile appfire-ci
+            - *buildForJira
+            - npx @appfire/fuse-cli deploy --stage dev --profile appfire-ci
+    "{release/*}":
+      - step:
+          name: Deploy to stage
+          script:
+            - env | sort
+            - *preInstalls
+            - *setNexus
+            - *setDtsAwsCreds
+            - *setAwsProfile
+            - npm config list
+            - pnpm install
+            - npx @appfire/fuse-cli deploy --stage stage --profile appfire-ci
+    master:
+      - step:
+          name: Deploy to production
+          trigger: manual
+          script:
+            - env | sort
+            - *preInstalls
+            - *setNexus
+            - *setProdAwsCreds
+            - *setAwsProfile
+            - npm config list
+            - pnpm install
+            - npx @appfire/fuse-cli deploy --stage prod --profile appfire-ci
