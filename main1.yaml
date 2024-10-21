@@ -1,0 +1,217 @@
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    branches:
+      - '**'
+  push:
+    branches:
+      - develop
+      - release/*
+      - master
+
+jobs:
+  lints:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        concurrency: [2]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - name: Install dependencies
+        run: |
+          curl "https://d1vvhvl2y92vvt.cloudfront.net/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" &&
+          unzip awscliv2.zip &&
+          sudo ./aws/install
+          wget https://github.com/mikefarah/yq/releases/download/v4.9.3/yq_linux_amd64 -O /usr/bin/yq &&
+          sudo chmod +x /usr/bin/yq
+          npm install -g pnpm
+          npm install -g aws-cdk
+          
+      - name: Set Nexus
+        run: |
+          npm install -g npm@8.19.3
+          npm config set registry ${{ secrets.NEXUS_PROD_GROUP_REGISTRY }}
+          npm config set @fusesnapshot:registry ${{ secrets.NEXUS_FUSE_SNAPSHOT_REGISTRY }}
+          npm config set @fuseprod:registry ${{ secrets.NEXUS_FUSE_PROD_REGISTRY }}
+          npm config set email ${{ secrets.NEXUS_READONLY_EMAIL }}
+          npm config set _auth="${{ secrets.NEXUS_READONLY_TOKEN }}"
+
+      - name: Set AWS Credentials
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.DTS_AWS_KEY }} --profile appfire-ci
+          aws configure set aws_secret_access_key ${{ secrets.DTS_AWS_SECRET }} --profile appfire-ci
+          aws configure set region us-east-1 --profile appfire-ci
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run lints
+        run: pnpm run lint -- --concurrency=2
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - name: Install dependencies
+        run: |
+          curl "https://d1vvhvl2y92vvt.cloudfront.net/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" &&
+          unzip awscliv2.zip &&
+          sudo ./aws/install
+          wget https://github.com/mikefarah/yq/releases/download/v4.9.3/yq_linux_amd64 -O /usr/bin/yq &&
+          sudo chmod +x /usr/bin/yq
+          npm install -g pnpm
+          npm install -g aws-cdk
+
+      - name: Set Nexus
+        run: |
+          npm install -g npm@8.19.3
+          npm config set registry ${{ secrets.NEXUS_PROD_GROUP_REGISTRY }}
+          npm config set @fusesnapshot:registry ${{ secrets.NEXUS_FUSE_SNAPSHOT_REGISTRY }}
+          npm config set @fuseprod:registry ${{ secrets.NEXUS_FUSE_PROD_REGISTRY }}
+          npm config set email ${{ secrets.NEXUS_READONLY_EMAIL }}
+          npm config set _auth="${{ secrets.NEXUS_READONLY_TOKEN }}"
+
+      - name: Set AWS Credentials
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.DTS_AWS_KEY }} --profile appfire-ci
+          aws configure set aws_secret_access_key ${{ secrets.DTS_AWS_SECRET }} --profile appfire-ci
+          aws configure set region us-east-1 --profile appfire-ci
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run tests
+        run: pnpm run tests -- --concurrency=2
+
+  deploy_dev:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          curl "https://d1vvhvl2y92vvt.cloudfront.net/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" &&
+          unzip awscliv2.zip &&
+          sudo ./aws/install
+          wget https://github.com/mikefarah/yq/releases/download/v4.9.3/yq_linux_amd64 -O /usr/bin/yq &&
+          sudo chmod +x /usr/bin/yq
+          npm install -g pnpm
+          npm install -g aws-cdk
+
+      - name: Set Nexus
+        run: |
+          npm install -g npm@8.19.3
+          npm config set registry ${{ secrets.NEXUS_PROD_GROUP_REGISTRY }}
+          npm config set @fusesnapshot:registry ${{ secrets.NEXUS_FUSE_SNAPSHOT_REGISTRY }}
+          npm config set @fuseprod:registry ${{ secrets.NEXUS_FUSE_PROD_REGISTRY }}
+          npm config set email ${{ secrets.NEXUS_READONLY_EMAIL }}
+          npm config set _auth="${{ secrets.NEXUS_READONLY_TOKEN }}"
+
+      - name: Set AWS Credentials
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.DTS_AWS_KEY }} --profile appfire-ci
+          aws configure set aws_secret_access_key ${{ secrets.DTS_AWS_SECRET }} --profile appfire-ci
+          aws configure set region us-east-1 --profile appfire-ci
+
+      - name: Build for Confluence
+        run: |
+          yq eval '.key = "com.wittified.atl-announcer-confluence-dev"' -i public/atlassian-connect.json
+          yq eval '.fuse.app = "announcer-conf"' -i fuse-config.yaml
+
+      - name: Deploy to Dev
+        run: npx @appfire/fuse-cli deploy --stage dev --profile appfire-ci
+
+      - name: Build for Jira
+        run: |
+          yq eval '.key = "com.wittified.atl-announcer-jira-dev"' -i public/atlassian-connect.json
+          yq eval '.fuse.app = "announcer-jira"' -i fuse-config.yaml
+
+      - name: Deploy to Dev
+        run: npx @appfire/fuse-cli deploy --stage dev --profile appfire-ci
+
+  deploy_stage:
+    if: startsWith(github.ref, 'refs/heads/release/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          curl "https://d1vvhvl2y92vvt.cloudfront.net/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" &&
+          unzip awscliv2.zip &&
+          sudo ./aws/install
+          wget https://github.com/mikefarah/yq/releases/download/v4.9.3/yq_linux_amd64 -O /usr/bin/yq &&
+          sudo chmod +x /usr/bin/yq
+          npm install -g pnpm
+          npm install -g aws-cdk
+
+      - name: Set Nexus
+        run: |
+          npm install -g npm@8.19.3
+          npm config set registry ${{ secrets.NEXUS_PROD_GROUP_REGISTRY }}
+          npm config set @fusesnapshot:registry ${{ secrets.NEXUS_FUSE_SNAPSHOT_REGISTRY }}
+          npm config set @fuseprod:registry ${{ secrets.NEXUS_FUSE_PROD_REGISTRY }}
+          npm config set email ${{ secrets.NEXUS_READONLY_EMAIL }}
+          npm config set _auth="${{ secrets.NEXUS_READONLY_TOKEN }}"
+
+      - name: Set AWS Credentials
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.DTS_AWS_KEY }} --profile appfire-ci
+          aws configure set aws_secret_access_key ${{ secrets.DTS_AWS_SECRET }} --profile appfire-ci
+          aws configure set region us-east-1 --profile appfire-ci
+
+      - name: Deploy to Stage
+        run: npx @appfire/fuse-cli deploy --stage stage --profile appfire-ci
+
+  deploy_prod:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          curl "https://d1vvhvl2y92vvt.cloudfront.net/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" &&
+          unzip awscliv2.zip &&
+          sudo ./aws/install
+          wget https://github.com/mikefarah/yq/releases/download/v4.9.3/yq_linux_amd64 -O /usr/bin/yq &&
+          sudo chmod +x /usr/bin/yq
+          npm install -g pnpm
+          npm install -g aws-cdk
+
+      - name: Set Nexus
+        run: |
+          npm install -g npm@8.19.3
+          npm config set registry ${{ secrets.NEXUS_PROD_GROUP_REGISTRY }}
+          npm config set @fusesnapshot:registry ${{ secrets.NEXUS_FUSE_SNAPSHOT_REGISTRY }}
+          npm config set @fuseprod:registry ${{ secrets.NEXUS_FUSE_PROD_REGISTRY }}
+          npm config set email ${{ secrets.NEXUS_READONLY_EMAIL }}
+          npm config set _auth="${{ secrets.NEXUS_READONLY_TOKEN }}"
+
+      - name: Set AWS Credentials
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.DTS_AWS_KEY }} --profile appfire-ci
+          aws configure set aws_secret_access_key ${{ secrets.DTS_AWS_SECRET }} --profile appfire-ci
+          aws configure set region us-east-1 --profile appfire-ci
+
+      - name: Deploy to Prod
+        run: npx @appfire/fuse-cli deploy --stage prod --profile appfire-ci
