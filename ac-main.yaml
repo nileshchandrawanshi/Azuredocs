@@ -1,0 +1,54 @@
+name: deploy
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  deploy_to_dts:
+    runs-on: ubuntu-latest
+    containers:
+      image: docker:latest
+
+    env:
+      NEXUS_TOKEN_KEY: ${{ secrets.NEXUS_REGISTRY }}
+      NEXUS_REGISTRY: ${{ secrets.NEXUS_REGISTRY }}
+      NEXUS_EMAIL: ${{ secrets.NEXUS_EMAIL }}
+      NEXUS_TOKEN: ${{ secrets.NEXUS_TOKEN }}
+      # PROD_AWS_ACCOUNT: ${{ secrets.PROD_AWS_ACCOUNT }}
+      # PROD_AWS_DEFAULT_REGION: ${{ secrets.PROD_AWS_DEFAULT_REGION }}
+      # PROD_AWS_ACCESS_KEY_ID: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+      # PROD_AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set NPM Config
+        run: |
+          export NEXUS_TOKEN_KEY=$(echo $NEXUS_REGISTRY | sed 's/https://g')
+          npm config set registry $NEXUS_REGISTRY
+          npm config set email $NEXUS_EMAIL
+          npm config set $NEXUS_TOKEN_KEY:_auth=$NEXUS_TOKEN
+          npm config set always-auth true
+
+      - name: Install dependencies and tools
+        run: |
+          npm install -g typescript
+          npm install -g ts-node
+          npm install -g aws-cdk@2.79.1
+
+      - name: Set AWS Credentials (DTS)
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          export CDK_DEPLOY_ACCOUNT=${{ secrets.DTS_AWS_ACCOUNT }}
+          export CDK_DEPLOY_REGION=${{ secrets.DTS_AWS_DEFAULT_REGION }}
+          export AWS_DEFAULT_REGION=${{ secrets.DTS_AWS_DEFAULT_REGION }}
+          export AWS_ACCESS_KEY_ID=${{ secrets.DTS_AWS_ACCESS_KEY_ID }}
+          export AWS_SECRET_ACCESS_KEY=${{ secrets.DTS_AWS_SECRET_ACCESS_KEY }}
+
+      - name: Deploy with Fuse CLI
+        run: |
+          npx @appfire/fuse-cli deploy --version
+          npx @appfire/fuse-cli@1.2.2 deploy --app "pcfj" --stage "prod"
